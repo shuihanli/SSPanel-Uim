@@ -23,6 +23,7 @@ return function (SlimApp $app) {
     $app->post('/tomato_back/{type}', App\Services\Payment::class . ':notify');
     $app->get('/tomato_back/{type}', App\Services\Payment::class . ':notify');
 
+	
     // User Center
     $app->group('/user', function () {
         $this->get('', App\Controllers\UserController::class . ':index');
