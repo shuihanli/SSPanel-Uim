@@ -11,7 +11,7 @@ return function (SlimApp $app) {
     // Home
     $app->post('/spay_back', App\Services\Payment::class . ':notify');
     $app->get('/spay_back', App\Services\Payment::class . ':notify');
-    $app->get('/', App\Controllers\HomeController::class . ':index');
+    $app->get('/', App\Controllers\HomeController::class . ':indexold');
     $app->get('/indexold', App\Controllers\HomeController::class . ':indexold');
     $app->get('/404', App\Controllers\HomeController::class . ':page404');
     $app->get('/405', App\Controllers\HomeController::class . ':page405');
@@ -133,6 +133,13 @@ return function (SlimApp $app) {
         $this->get('/logout', App\Controllers\AuthController::class . ':logout');
         $this->get('/telegram_oauth', App\Controllers\AuthController::class . ':telegram_oauth');
         $this->get('/login_getCaptcha', App\Controllers\AuthController::class . ':getCaptcha');
+
+        //移动端使用
+        $this->post('/mobileregister', App\Controllers\AuthController::class . ':registerMobileHandle');
+        $this->post('/mobilelogin', App\Controllers\AuthController::class . ':loginMobileHandle');
+        $this->post('/mobilelogout', App\Controllers\AuthController::class . ':Mobilelogout');
+        $this->post('/mobileqrcode_login/{token}', App\Controllers\AuthController::class . ':loginMobiletoken');
+        $this->post('/mobilehelp', App\Controllers\AuthController::class . ':mobilehelp');
     })->add(new Guest());
 
     // Password
@@ -141,6 +148,9 @@ return function (SlimApp $app) {
         $this->post('/reset', App\Controllers\PasswordController::class . ':handleReset');
         $this->get('/token/{token}', App\Controllers\PasswordController::class . ':token');
         $this->post('/token/{token}', App\Controllers\PasswordController::class . ':handleToken');
+
+        //移动端使用
+        $this->post('/mobilereset', App\Controllers\AuthController::class . ':handleMobileReset');
     })->add(new Guest());
 
     // Admin
@@ -289,7 +299,11 @@ return function (SlimApp $app) {
         $this->get('/captcha/{id}', App\Controllers\ResController::class . ':captcha');
     });
 
-
+    //移动端使用
+    $app->group('/mobilelink', function () {
+        $this->get('/{token}', App\Controllers\LinkController::class . ':MobileGetContent');
+    });
+    
     $app->group('/link', function () {
         $this->get('/{token}', App\Controllers\LinkController::class . ':GetContent');
     });
