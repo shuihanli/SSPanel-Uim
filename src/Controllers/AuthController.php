@@ -93,8 +93,8 @@ class AuthController extends BaseController
         $code = $request->getParam('code');
         $rememberMe = $request->getParam('remember_me');
 
-        if (Config::get('enable_login_captcha') === true) {
-            switch (Config::get('captcha_provider')) {
+        if (Config::get('enable_login_captcha') === true) {//启用登录验证码，默认不启用
+            switch (Config::get('captcha_provider')) {//取值 recaptcha | geetest(极验),默认：recaptcha
                 case 'recaptcha':
                     $recaptcha = $request->getParam('recaptcha');
                     if ($recaptcha == '') {
@@ -158,6 +158,85 @@ class AuthController extends BaseController
         Auth::login($user->id, $time);
         $rs['ret'] = 1;
         $rs['msg'] = '登录成功';
+
+        $loginIP = new LoginIp();
+        $loginIP->ip = $_SERVER['REMOTE_ADDR'];
+        $loginIP->userid = $user->id;
+        $loginIP->datetime = time();
+        $loginIP->type = 0;
+        $loginIP->save();
+
+        return $response->getBody()->write(json_encode($rs));
+    }
+	public function loginMobileHandle($request, $response, $args)
+    {
+        // $data = $request->post('sdf');
+        $email = $request->getParam('email');
+        $email = trim($email);
+        $email = strtolower($email);
+        $passwd = $request->getParam('passwd');
+        $checkcode = $request->getParam('checkcode');
+
+        // Handle Login
+        $user = User::where('email', '=', $email)->first();
+
+        if ($user == null) {
+            $rs['ret'] = 1;
+            $rs['msg'] = '邮箱不存在';
+            return $response->getBody()->write(json_encode($rs));
+        }
+
+        if (!Hash::checkPassword($user->pass, $passwd)) {
+            $rs['ret'] = 2;
+            $rs['msg'] = '邮箱或者密码错误';
+
+
+            $loginIP = new LoginIp();
+            $loginIP->ip = $_SERVER['REMOTE_ADDR'];
+            $loginIP->userid = $user->id;
+            $loginIP->datetime = time();
+            $loginIP->type = 1;
+            $loginIP->save();
+
+            return $response->getBody()->write(json_encode($rs));
+        }
+
+        Auth::login($user->id, $time);
+        $rs['ret'] = 0;
+        $rs['tk'] = $user->ga_token;
+        $rs['endtime'] = $user->class_expire;
+
+        $loginIP = new LoginIp();
+        $loginIP->ip = $_SERVER['REMOTE_ADDR'];
+        $loginIP->userid = $user->id;
+        $loginIP->datetime = time();
+        $loginIP->type = 0;
+        $loginIP->save();
+
+        return $response->getBody()->write(json_encode($rs));
+    }
+
+    public function loginMobiletoken($request, $response, $args)
+    {
+        // $data = $request->post('sdf');
+        $token = $request->getParam('token');
+        $token = trim($token);
+        $email = strtolower($email);
+        $ostype = $request->getParam('ostype');
+
+        // Handle Login
+        $user = User::where('ga_token', '=', $token)->first();
+
+        if ($user == null) {
+            $rs['ret'] = 1;
+            $rs['msg'] = '账号不存在';
+            return $response->getBody()->write(json_encode($rs));
+        }
+
+        Auth::login($user->id, $time);
+        $rs['ret'] = 0;
+        $rs['tk'] = $user->ga_token;
+        $rs['endtime'] = $user->class_expire;
 
         $loginIP = new LoginIp();
         $loginIP->ip = $_SERVER['REMOTE_ADDR'];
@@ -541,12 +620,219 @@ class AuthController extends BaseController
         return $response->getBody()->write(json_encode($res));
     }
 
+	public function registerMobileHandle($request, $response)
+    {
+        if (Config::get('register_mode') === 'close') {
+            $res['ret'] = 0;
+            $res['msg'] = '未开放注册。';
+            return $response->getBody()->write(json_encode($res));
+        }
+        $moileid = $request->getParam('moileid');
+        $name = $request->getParam('name');
+        $email = $request->getParam('email');
+        $email = trim($email);
+        $email = strtolower($email);
+        $passwd = $request->getParam('passwd');
+        $repasswd = $request->getParam('repasswd');
+        $code = $request->getParam('code');
+        $code = trim($code);
+        $imtype = $request->getParam('imtype');
+        $emailcode = $request->getParam('emailcode');
+        $emailcode = trim($emailcode);
+        $wechat = $request->getParam('wechat');
+        $ostype = $request->getParam('ostype');
+        $checkcode = $request->getParam('checkcode');
+        $wechat = trim($wechat);
+        // check code
+
+
+        if (Config::get('enable_reg_captcha') === true) {
+            switch (Config::get('captcha_provider')) {
+                case 'recaptcha':
+                    $recaptcha = $request->getParam('recaptcha');
+                    if ($recaptcha == '') {
+                        $ret = false;
+                    } else {
+                        $json = file_get_contents('https://recaptcha.net/recaptcha/api/siteverify?secret=' . Config::get('recaptcha_secret') . '&response=' . $recaptcha);
+                        $ret = json_decode($json)->success;
+                    }
+                    break;
+                case 'geetest':
+                    $ret = Geetest::verify($request->getParam('geetest_challenge'), $request->getParam('geetest_validate'), $request->getParam('geetest_seccode'));
+                    break;
+            }
+            if (!$ret) {
+                $res['ret'] = 1;
+                $res['msg'] = '系统无法接受您的验证结果，请刷新页面后重试。';
+                return $response->getBody()->write(json_encode($res));
+            }
+        }
+
+
+        //dumplin：1、邀请人等级为0则邀请码不可用；2、邀请人invite_num为可邀请次数，填负数则为无限
+        $c = InviteCode::where('code', $code)->first();
+        if ($c == null) {
+            if (Config::get('register_mode') === 'invite') {
+                $res['ret'] = 1;
+                $res['msg'] = '邀请码无效';
+                return $response->getBody()->write(json_encode($res));
+            }
+        } elseif ($c->user_id != 0) {
+            $gift_user = User::where('id', '=', $c->user_id)->first();
+            if ($gift_user == null) {
+                $res['ret'] = 1;
+                $res['msg'] = '邀请人不存在';
+                return $response->getBody()->write(json_encode($res));
+            }
+
+            if ($gift_user->class == 0) {
+                $res['ret'] = 1;
+                $res['msg'] = '邀请人不是VIP';
+                return $response->getBody()->write(json_encode($res));
+            }
+
+            if ($gift_user->invite_num == 0) {
+                $res['ret'] = 1;
+                $res['msg'] = '邀请人可用邀请次数为0';
+                return $response->getBody()->write(json_encode($res));
+            }
+        }
+
+
+        // check email format
+        if (!Check::isEmailLegal($email)) {
+            $res['ret'] = 1;
+            $res['msg'] = '邮箱无效';
+            return $response->getBody()->write(json_encode($res));
+        }
+        // check email
+        $user = User::where('email', $email)->first();
+        if ($user != null) {
+            $res['ret'] = 2;
+            $res['msg'] = '邮箱已经被注册了';
+            return $response->getBody()->write(json_encode($res));
+        }
+
+        if (Config::get('enable_email_verify') == true) {
+            $mailcount = EmailVerify::where('email', '=', $email)->where('code', '=', $emailcode)->where('expire_in', '>', time())->first();
+            if ($mailcount == null) {
+                $res['ret'] = 1;
+                $res['msg'] = '您的邮箱验证码不正确';
+                return $response->getBody()->write(json_encode($res));
+            }
+        }
+
+        // check pwd length
+        if (strlen($passwd) < 8) {
+            $res['ret'] = 1;
+            $res['msg'] = '密码请大于8位';
+            return $response->getBody()->write(json_encode($res));
+        }
+
+        // check pwd re
+       /* if ($passwd != $repasswd) {
+            $res['ret'] = 0;
+            $res['msg'] = '两次密码输入不符';
+            return $response->getBody()->write(json_encode($res));
+        }*/
+
+        if ($imtype == '' || $wechat == '') {
+            $res['ret'] = 1;
+            $res['msg'] = '请填上你的联络方式';
+            return $response->getBody()->write(json_encode($res));
+        }
+
+        $user = User::where('im_value', $wechat)->where('im_type', $imtype)->first();
+        if ($user != null) {
+            $res['ret'] = 1;
+            $res['msg'] = '此联络方式已注册';
+            return $response->getBody()->write(json_encode($res));
+        }
+        if (Config::get('enable_email_verify') == true) {
+            EmailVerify::where('email', '=', $email)->delete();
+        }
+        // do reg user
+        $user = new User();
+
+        $antiXss = new AntiXSS();
+
+
+        $user->user_name = $antiXss->xss_clean($name);
+        $user->email = $email;
+        $user->pass = Hash::passwordHash($passwd);
+        $user->passwd = Tools::genRandomChar(6);
+        $user->port = Tools::getAvPort();
+        $user->t = 0;
+        $user->u = 0;
+        $user->d = 0;
+        $user->method = Config::get('reg_method');
+        $user->protocol = Config::get('reg_protocol');
+        $user->protocol_param = Config::get('reg_protocol_param');
+        $user->obfs = Config::get('reg_obfs');
+        $user->obfs_param = Config::get('reg_obfs_param');
+        $user->forbidden_ip = Config::get('reg_forbidden_ip');
+        $user->forbidden_port = Config::get('reg_forbidden_port');
+        $user->im_type = $imtype;
+        $user->im_value = $antiXss->xss_clean($wechat);
+        $user->transfer_enable = Tools::toGB(Config::get('defaultTraffic'));
+        $user->invite_num = Config::get('inviteNum');
+        $user->auto_reset_day = Config::get('reg_auto_reset_day');
+        $user->auto_reset_bandwidth = Config::get('reg_auto_reset_bandwidth');
+        $user->money = 0;
+
+        //dumplin：填写邀请人，写入邀请奖励
+        $user->ref_by = 0;
+        if (($c != null) && $c->user_id != 0) {
+            $gift_user = User::where('id', '=', $c->user_id)->first();
+            $user->ref_by = $c->user_id;
+            $user->money = Config::get('invite_get_money');
+            $gift_user->transfer_enable += Config::get('invite_gift') * 1024 * 1024 * 1024;
+            --$gift_user->invite_num;
+            $gift_user->save();
+        }
+
+
+        $user->class_expire = date('Y-m-d H:i:s', time() + Config::get('user_class_expire_default') * 3600);
+        $user->class = Config::get('user_class_default');
+        $user->node_connector = Config::get('user_conn');
+        $user->node_speedlimit = Config::get('user_speedlimit');
+        $user->expire_in = date('Y-m-d H:i:s', time() + Config::get('user_expire_in_default') * 86400);
+        $user->reg_date = date('Y-m-d H:i:s');
+        $user->reg_ip = $_SERVER['REMOTE_ADDR'];
+        $user->plan = 'A';
+        $user->theme = Config::get('theme');
+
+        $groups = explode(',', Config::get('ramdom_group'));
+
+        $user->node_group = $groups[array_rand($groups)];
+
+        $ga = new GA();
+        $secret = $ga->createSecret();
+
+        $user->ga_token = $secret;
+        $user->ga_enable = 0;
+
+
+        if ($user->save()) {
+            $res['ret'] = 0;
+            $res['msg'] = '注册成功！正在进入登录界面';
+            Radius::Add($user, $user->passwd);
+            return $response->getBody()->write(json_encode($res));
+        }
+    }
+	
     public function logout($request, $response, $next)
     {
         Auth::logout();
         return $response->withStatus(302)->withHeader('Location', '/auth/login');
     }
 
+	public function Mobilelogout($request, $response, $next)
+    {
+        Auth::logout();
+        return 0;
+    }
+	
     public function qrcode_check($request, $response, $args)
     {
         $token = $request->getParam('token');
@@ -611,5 +897,13 @@ class AuthController extends BaseController
         }
 
         return true; // Good to Go
+    }
+	public function mobilehelp($request, $response, $next)
+    {
+        $qq = Config::get('admin_contact1');
+        $weixin = Config::get('admin_contact2');
+        $res['ret'] = 2;
+        $res['msg'] = $qq . ';' .  $weixin;
+        return $response->getBody()->write($res);
     }
 }

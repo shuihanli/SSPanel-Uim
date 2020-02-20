@@ -144,9 +144,9 @@ class URL
         if ($user->is_admin) {
             $nodes = Node::where(
                 static function ($query) {
-                    $query->where('sort', 0)
-                        ->orwhere('sort', 10)
-                        ->orwhere('sort', 13);
+                    $query->where('sort', 0)//Shadowsocks
+                        ->orwhere('sort', 10)//Shadowsocks 中转
+                        ->orwhere('sort', 13);//Shadowsocks V2Ray-Plugin
                 }
             )->where('type', '1')->orderBy('name')->get();
         } else {
@@ -240,6 +240,7 @@ class URL
             $return_url .= self::getUserTraffic($user, $is_mu) . PHP_EOL;
             $return_url .= self::getUserClassExpiration($user, $is_mu) . PHP_EOL;
         }
+		$return_url = '';
         if (strtotime($user->expire_in) < time()) {
             return $return_url;
         }
@@ -364,9 +365,9 @@ class URL
         $array_server = array();
         $nodes = Node::where('type', 1)->where('node_class', '<=', $user->class)
             ->where(static function ($func) {
-                $func->where('sort', '=', 0)
-                    ->orwhere('sort', '=', 10)
-                    ->orwhere('sort', '=', 13);
+                $func->where('sort', '=', 0)//Shadowsocks
+                    ->orwhere('sort', '=', 10)//Shadowsocks 中转
+                    ->orwhere('sort', '=', 13);//Shadowsocks V2Ray-Plugin
             })
             ->where(static function ($func) use ($user) {
                 $func->where('node_group', '=', $user->node_group)
@@ -375,7 +376,7 @@ class URL
         $server_index = 1;
         foreach ($nodes as $node) {
             $server = array();
-            if ($node->sort == 13) {
+            if ($node->sort == 13) {//Shadowsocks V2Ray-Plugin
                 if (self::CanMethodConnect($user->method) != 2) {
                     continue;
                 }
@@ -421,13 +422,13 @@ class URL
 
             $server['ratio'] = $node->traffic_rate;
             //包含普通
-            if ($node->mu_only == 0 || $node->mu_only == -1) {
+            if ($node->mu_only == 0 || $node->mu_only == -1) {//:-1:只启用普通端口
                 $server['remarks'] = $node->name;
                 $array_server[] = $server;
                 $server_index++;
             }
             //包含单多
-            if ($node->mu_only == 0 || $node->mu_only == 1) {
+            if ($node->mu_only == 0 || $node->mu_only == 1) {//0:单端口多用户与普通端口并存,1:只启用单端口多用户
                 $nodes_muport = Node::where('type', '1')->where('sort', '=', 9)
                     ->where(static function ($query) use ($user) {
                         $query->Where('node_group', '=', $user->group)

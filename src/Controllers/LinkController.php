@@ -50,6 +50,35 @@ class LinkController extends BaseController
         return $NLink->token;
     }
 
+	public static function MobileGetContent($request, $response, $args)
+    {
+        $token = $args['token'];
+/*
+        //$builder->getPhrase();
+        $Elink = Link::where('token', '=', $token)->first();
+        if ($Elink == null) {
+            return null;
+        }
+
+        if ($Elink->type != 11) {
+            return null;
+        }*/
+
+        $user = User::where('ga_token', $token)->first();
+        if ($user == null) {
+            return null;
+        }
+
+        $mu = 0;
+        if (isset($request->getQueryParams()['mu'])) {
+            $mu = (int)$request->getQueryParams()['mu'];
+        }
+
+        $newResponse = $response->withHeader('Content-type', ' application/octet-stream; charset=utf-8')->withHeader('Cache-Control', 'no-store, no-cache, must-revalidate')->withHeader('Content-Disposition', ' attachment; filename=' . $token . '.txt');
+        $newResponse->getBody()->write(self::GetSSRSub(User::where('id', '=', $user->id)->first(), $mu));
+        return $newResponse;
+    }
+	
     public static function GetContent($request, $response, $args)
     {
         $token = $args['token'];

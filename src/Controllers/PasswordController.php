@@ -39,7 +39,28 @@ class PasswordController extends BaseController
 
         return $response->getBody()->write(json_encode($rs));
     }
+	public function handleMobileReset($request, $response, $args)
+    {
+        $email = $request->getParam('email');
+        $ostype = $request->getParam('ostype');
+        // check limit
 
+        // send email
+        $user = User::where('email', $email)->first();
+        if ($user == null) {
+            $rs['ret'] = 0;
+            $rs['msg'] = '此邮箱不存在.';
+            return $response->getBody()->write(json_encode($rs));
+        }
+        $rs['ret'] = 0;
+        $rs['msg'] = '重置邮件已经发送,请检查邮箱.';
+        if (Password::sendResetEmail($email)) {
+            $rs['ret'] = 2;
+            $res['msg'] = '邮件发送失败，请联系网站管理员。';
+        }
+
+        return $response->getBody()->write(json_encode($rs));
+    }
     public function token($request, $response, $args)
     {
         $token = $args['token'];
